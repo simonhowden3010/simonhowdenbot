@@ -1,0 +1,215 @@
+<html>
+    <head>
+        <title>SimonBot</title>
+        <style>
+            body {
+                box-sizing: border-box;
+                background-color: grey;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            body * {
+                box-sizing: border-box;
+            }
+            #chat-container {
+                max-width: 460px;
+                width: 100%;
+                display: flex;
+                align-items: center;
+                flex-direction: column;
+                padding: 15px;
+                border: 1px solid black;
+                border-radius: 7px;
+            }
+            .image-frame {
+                width: 100%;
+                border-radius: 7px;
+                overflow: hidden;
+                height: 428px;
+                background-color: black;
+                margin-bottom: 15px;
+                position: relative;
+            }
+            .image-frame img {
+                max-width: 100%;
+                position: absolute;
+                left: 0;
+                top: 0;
+                object-fit: contain;
+                object-position: center center;
+            }
+            .image-frame.thinking img {
+                visibility: hidden;
+            }
+            .image-frame.thinking img.face-thinking {
+                visibility: visible;
+            }
+            .image-frame.error img {
+                visibility: hidden;
+            }
+            .image-frame.error img.face-error {
+                visibility: visible;
+            }
+            .image-frame.talking img {
+                visibility: hidden;
+            }
+            .image-frame.talking img.face-talking {
+                visibility: visible;
+            }
+            .image-frame img {
+                max-width: 100%;
+                visibility: hidden;
+            }
+            .info-container {
+                width: 100%;
+                margin-bottom: 2px;
+            }
+            .info-container-inner {
+                display: flex;
+                flex-direction: row;
+            }
+            .info-container-inner input {
+                width: 100%;
+                padding: 15px;
+            }
+            .info-container-inner button {
+                padding: 15px;
+            }
+            #chat-log > div {
+                margin-bottom: 4px;
+                font-family: arial;
+            }
+            #chat-log {
+                margin-bottom: 11px;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="chat-container">
+            <div id="image-frame" class="image-frame">
+                <img class="face-talking" src="images/face1.jpg" />
+                <img class="face-thinking" src="images/thinking.jpg" />
+                <img class="face-error" src="images/error.jpg" />
+            </div>
+            <div class="info-container">
+                <div id="chat-log"></div>
+                <div class="info-container-inner">
+                    <input type="text" id="user-input" placeholder="Talk to Simon Bot">
+                    <button id="send-button">Ask</button>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+              var imageholder = document.getElementById('image-frame');
+              const chatGptApiKey = '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';
+              const chatGptApiUrl = 'https://api.openai.com/v1/chat/completions';
+
+              const elevenLabsApiKey = 'dae4554d737593ae65ab8d4d5324ecab'
+              const elevenLabsApiUrl = 'https://api.elevenlabs.io/v1/voices/add'
+              const elevenLabsVoiceId = "21m00Tcm4TlvDq8ikWAM"; //Rachel
+              let bSpeechInProgress = false;
+              let oSpeechRecognizer = null
+        
+              const chatLog = document.getElementById('chat-log');
+              const userInput = document.getElementById('user-input');
+              const sendButton = document.getElementById('send-button');
+
+              sendButton.addEventListener('click', () => {
+                chatLog.innerHTML = ``;
+                imageholder.classList.remove('error');
+                imageholder.classList.remove('talking');
+                imageholder.classList.add('thinking');
+                const userMessage = userInput.value;
+
+                // start the gpt part
+                getGptReply(userMessage);
+              });
+
+              async function getElevenLabsReply(userMessage) {
+                if (userMessage.trim() === '') return;
+
+                await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + elevenLabsVoiceId, {
+                method: 'POST',
+                    headers: {
+                        'Accept': 'audio/mpeg',
+                        'Content-Type': 'application/json',
+                        'xi-api-key': elevenLabsApiKey,
+                    },
+                    body: JSON.stringify({
+                        text: userMessage,
+                        voice_settings: { stability: 0, similarity_boost: 0 }
+                    }),
+                })
+                .then(response => response.arrayBuffer())
+                .then(buffer => {
+                    var oBlob = new Blob([buffer], { "type": "audio/mpeg" });
+                    var audioURL = window.URL.createObjectURL(oBlob);
+                    var audio = new Audio();
+                    audio.src = audioURL;
+                    audio.play();
+                    imageholder.classList.remove('thinking');
+                    imageholder.classList.add('talking');
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    chatLog.innerHTML += `<div>Assistant: ERROR</div>`;
+                    return false;
+                });
+                console.log(userMessage);
+              }
+
+              async function getGptReply(userMessage) {
+                if (userMessage.trim() === '') return;
+                chatLog.innerHTML += `<div>Ask Simon Bot: ${userMessage}</div>`;
+                userInput.value = '';
+
+                await fetch(chatGptApiUrl, {
+                method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${chatGptApiKey}`,
+                    },
+                    body: JSON.stringify({
+                        model: 'gpt-3.5-turbo', // You can use the model of your choice
+                            messages: [
+                            {
+                                role: 'system',
+                                content: 'You are a helpful assistant.',
+                            },
+                            {
+                                role: 'user',
+                                content: userMessage,
+                            },
+                        ],
+                    }),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    const assistantResponse = data.choices[0].message.content;
+                    chatLog.innerHTML += `<div>Simon Bot: ${assistantResponse}</div>`;
+                    if(assistantResponse.length > 3499) {
+                        chatLog.innerHTML += `<div>Error: Reply too long for voice</div>`;
+                    } else {
+                        getElevenLabsReply(assistantResponse);
+                    }
+                    
+                    return assistantResponse;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    imageholder.classList.remove('thinking');
+                    imageholder.classList.add('error');
+                    chatLog.innerHTML += `<div>Assistant: ERROR</div>`;
+                    return false;
+                });
+              }
+        
+
+            });
+          </script>
+    </body>
+</html>
+
